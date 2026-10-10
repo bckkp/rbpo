@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: ru.mtuci.rbpo.controller.ObservationApiTests
+-------------------------------------------------------------------------------
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.297 s -- in ru.mtuci.rbpo.controller.ObservationApiTests
