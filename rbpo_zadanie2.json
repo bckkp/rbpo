@@ -1,0 +1,459 @@
+{
+  "info": {
+    "_postman_id": "a694873a-98e4-4e90-9a18-b20c1d39337c",
+    "name": "RBPO — астрономические наблюдения",
+    "description": "Небольшая коллекция для проверки REST API учебного проекта. Перед запуском запустите приложение на localhost:8080. Запросы внутри папки «Основной сценарий» рекомендуется выполнять по порядку.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "objectId",
+      "value": ""
+    },
+    {
+      "key": "telescopeId",
+      "value": ""
+    },
+    {
+      "key": "sessionId",
+      "value": ""
+    },
+    {
+      "key": "recordId",
+      "value": ""
+    },
+    {
+      "key": "runId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Простые GET-запросы",
+      "item": [
+        {
+          "name": "Приветствие",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/greeting?name=Галилей",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "greeting"
+              ],
+              "query": [
+                {
+                  "key": "name",
+                  "value": "Галилей"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Статус 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Получено приветствие', () => pm.expect(pm.response.text()).to.include('Галилей'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Объекты каталога Мессье",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/messier?from=108&to=200",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "messier"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "108"
+                },
+                {
+                  "key": "to",
+                  "value": "200"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Статус 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Диапазон ограничен значением 110', () => pm.expect(pm.response.json()).to.eql([108, 109, 110]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Основной сценарий",
+      "description": "Запустите папку через Run folder: запросы создают данные и передают ID следующим запросам.",
+      "item": [
+        {
+          "name": "1. Создать пользователя",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('runId', Date.now().toString());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Статус 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.id).to.be.a('number');",
+                  "pm.collectionVariables.set('userId', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"postman_{{runId}}\",\n  \"fullName\": \"Тестовый наблюдатель\",\n  \"email\": \"postman_{{runId}}@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/users"
+          }
+        },
+        {
+          "name": "2. Создать небесный объект",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Статус 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('objectId', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Сатурн\",\n  \"type\": \"PLANET\",\n  \"minAperture\": 60\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/celestial-objects"
+          }
+        },
+        {
+          "name": "3. Создать телескоп",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Статус 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.available).to.eql(true);",
+                  "pm.collectionVariables.set('telescopeId', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Levenhuk 102\",\n  \"aperture\": 102\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/telescopes"
+          }
+        },
+        {
+          "name": "4. Создать сеанс наблюдения",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Статус 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.status).to.eql('PLANNED');",
+                  "pm.expect(body.createdAt).to.exist;",
+                  "pm.collectionVariables.set('sessionId', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"celestialObjectId\": {{objectId}},\n  \"telescopeId\": {{telescopeId}},\n  \"observerId\": {{userId}},\n  \"startTime\": \"2026-10-10T19:00:00Z\",\n  \"endTime\": \"2026-10-10T20:00:00Z\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/observation-sessions"
+          }
+        },
+        {
+          "name": "5. Создать запись наблюдения",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Статус 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.recordedAt).to.exist;",
+                  "pm.collectionVariables.set('recordId', body.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": {{sessionId}},\n  \"description\": \"Хорошо видны кольца Сатурна\",\n  \"quality\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/observation-records"
+          }
+        },
+        {
+          "name": "6. Получить созданный сеанс",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Статус 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Вернулся нужный сеанс', () => pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('sessionId'))));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/observation-sessions/{{sessionId}}"
+          }
+        },
+        {
+          "name": "7. PATCH: завершить сеанс",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Статус 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Статус изменён', () => pm.expect(pm.response.json().status).to.eql('COMPLETED'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/observation-sessions/{{sessionId}}"
+          }
+        },
+        {
+          "name": "8. Ошибка валидации: quality = 6",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Статус 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Ответ содержит описание ошибки', () => pm.expect(pm.response.json().detail).to.include('от 1 до 5'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": {{sessionId}},\n  \"description\": \"Некорректная оценка\",\n  \"quality\": 6\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/observation-records"
+          }
+        },
+        {
+          "name": "9. Удалить пользователя с каскадом",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Статус 204', () => pm.response.to.have.status(204));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/users/{{userId}}"
+          }
+        },
+        {
+          "name": "10. Проверить каскадное удаление сеанса",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Удалённый сеанс возвращает 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/observation-sessions/{{sessionId}}"
+          }
+        },
+        {
+          "name": "11. Проверить каскадное удаление записи",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Удалённая запись возвращает 404', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/observation-records/{{recordId}}"
+          }
+        }
+      ]
+    }
+  ]
+}
