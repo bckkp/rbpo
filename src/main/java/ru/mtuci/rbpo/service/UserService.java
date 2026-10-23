@@ -5,6 +5,7 @@ import static ru.mtuci.rbpo.service.Checks.notBlank;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import ru.mtuci.rbpo.exception.BadRequestException;
 import ru.mtuci.rbpo.exception.ConflictException;
@@ -13,6 +14,7 @@ import ru.mtuci.rbpo.model.User;
 import ru.mtuci.rbpo.repository.UserRepository;
 
 @Service
+@Transactional
 public class UserService {
 
     private final UserRepository userRepository;
@@ -66,10 +68,17 @@ public class UserService {
         if (!user.getEmail().matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) {
             throw new BadRequestException("Некорректный email: " + user.getEmail());
         }
-        boolean usernameTaken = userRepository.findAll().stream()
-                .anyMatch(u -> !u.getId().equals(user.getId()) && u.getUsername().equalsIgnoreCase(user.getUsername()));
+        boolean usernameTaken = user.getId() == null
+                ? userRepository.existsByUsernameIgnoreCase(user.getUsername())
+                : userRepository.existsByUsernameIgnoreCaseAndIdNot(user.getUsername(), user.getId());
         if (usernameTaken) {
             throw new ConflictException("Имя пользователя '" + user.getUsername() + "' уже занято");
+        }
+        boolean emailTaken = user.getId() == null
+                ? userRepository.existsByEmailIgnoreCase(user.getEmail())
+                : userRepository.existsByEmailIgnoreCaseAndIdNot(user.getEmail(), user.getId());
+        if (emailTaken) {
+            throw new ConflictException("Email '" + user.getEmail() + "' уже используется");
         }
     }
 }

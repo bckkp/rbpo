@@ -7,8 +7,10 @@ import java.time.Instant;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import ru.mtuci.rbpo.exception.BadRequestException;
+import ru.mtuci.rbpo.exception.ConflictException;
 import ru.mtuci.rbpo.exception.NotFoundException;
 import ru.mtuci.rbpo.model.ObservationRecord;
 import ru.mtuci.rbpo.model.ObservationSession;
@@ -17,6 +19,7 @@ import ru.mtuci.rbpo.repository.ObservationRecordRepository;
 import ru.mtuci.rbpo.repository.ObservationSessionRepository;
 
 @Service
+@Transactional
 public class ObservationRecordService {
 
     private static final int MIN_QUALITY = 1;
@@ -48,8 +51,12 @@ public class ObservationRecordService {
 
     public ObservationRecord update(Long id, ObservationRecord patch) {
         ObservationRecord record = findById(id);
+        Long previousSessionId = record.getSessionId();
         boolean sessionChanged = patch.getSessionId() != null
                 && !patch.getSessionId().equals(record.getSessionId());
+        if (sessionChanged) {
+            ensureCompletedSessionKeepsARecord(previousSessionId);
+        }
         if (patch.getSessionId() != null) {
             record.setSessionId(patch.getSessionId());
         }
@@ -64,7 +71,8 @@ public class ObservationRecordService {
     }
 
     public void delete(Long id) {
-        findById(id);
+        ObservationRecord record = findById(id);
+        ensureCompletedSessionKeepsARecord(record.getSessionId());
         recordRepository.deleteById(id);
     }
 
@@ -80,6 +88,15 @@ public class ObservationRecordService {
         int quality = required(record.getQuality(), "quality");
         if (quality < MIN_QUALITY || quality > MAX_QUALITY) {
             throw new BadRequestException("Оценка качества должна быть от " + MIN_QUALITY + " до " + MAX_QUALITY);
+        }
+    }
+
+    private void ensureCompletedSessionKeepsARecord(Long sessionId) {
+        ObservationSession session = sessionRepository.findById(sessionId).orElse(null);
+        if (session != null
+                && session.getStatus() == SessionStatus.COMPLETED
+                && recordRepository.countBySessionId(sessionId) <= 1) {
+            throw new ConflictException("Завершённый сеанс должен содержать хотя бы одну запись");
         }
     }
 }

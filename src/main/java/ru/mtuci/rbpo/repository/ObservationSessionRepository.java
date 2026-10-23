@@ -1,23 +1,42 @@
 package ru.mtuci.rbpo.repository;
 
 import java.util.List;
+import java.time.Instant;
 
-import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import jakarta.persistence.LockModeType;
 import ru.mtuci.rbpo.model.ObservationSession;
+import ru.mtuci.rbpo.model.SessionStatus;
 
-@Repository
-public class ObservationSessionRepository extends InMemoryRepository<ObservationSession> {
+public interface ObservationSessionRepository extends JpaRepository<ObservationSession, Long> {
 
-    public List<ObservationSession> findByCelestialObjectId(Long celestialObjectId) {
-        return findAllMatching(s -> celestialObjectId.equals(s.getCelestialObjectId()));
-    }
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from ObservationSession s where s.id = :id")
+    java.util.Optional<ObservationSession> findByIdForUpdate(@Param("id") Long id);
 
-    public List<ObservationSession> findByTelescopeId(Long telescopeId) {
-        return findAllMatching(s -> telescopeId.equals(s.getTelescopeId()));
-    }
+    List<ObservationSession> findByCelestialObjectId(Long celestialObjectId);
 
-    public List<ObservationSession> findByObserverId(Long observerId) {
-        return findAllMatching(s -> observerId.equals(s.getObserverId()));
-    }
+    List<ObservationSession> findByTelescopeId(Long telescopeId);
+
+    List<ObservationSession> findByObserverId(Long observerId);
+
+    boolean existsByTelescopeIdAndStatus(Long telescopeId, SessionStatus status);
+
+    @Query("""
+            select (count(s) > 0) from ObservationSession s
+            where s.telescopeId = :telescopeId
+              and s.status <> :cancelledStatus
+              and s.id <> :excludedId
+              and s.startTime < :endTime
+              and :startTime < s.endTime
+            """)
+    boolean hasOverlap(@Param("telescopeId") Long telescopeId,
+                       @Param("startTime") Instant startTime,
+                       @Param("endTime") Instant endTime,
+                       @Param("excludedId") Long excludedId,
+                       @Param("cancelledStatus") SessionStatus cancelledStatus);
 }

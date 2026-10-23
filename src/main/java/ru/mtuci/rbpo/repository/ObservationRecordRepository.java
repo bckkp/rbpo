@@ -2,14 +2,15 @@ package ru.mtuci.rbpo.repository;
 
 import java.util.List;
 
-import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 import ru.mtuci.rbpo.model.ObservationRecord;
 
-@Repository
-public class ObservationRecordRepository extends InMemoryRepository<ObservationRecord> {
+public interface ObservationRecordRepository extends JpaRepository<ObservationRecord, Long> {
 
-    public List<ObservationRecord> findBySessionId(Long sessionId) {
-        return findAllMatching(r -> sessionId.equals(r.getSessionId()));
-    }
+    List<ObservationRecord> findBySessionId(Long sessionId);
+
+    boolean existsBySessionId(Long sessionId);
+
+    long countBySessionId(Long sessionId);
 }

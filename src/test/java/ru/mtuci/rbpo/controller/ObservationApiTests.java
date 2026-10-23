@@ -96,6 +96,12 @@ class ObservationApiTests {
         send(post("/api/observation-sessions"), session(saturn, telescope, user, "22:30", "23:30"),
                 status().isConflict());
 
+        mockMvc.perform(post("/api/observation-sessions/{id}/start", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+        mockMvc.perform(get("/api/telescopes/{id}", telescope))
+                .andExpect(jsonPath("$.available").value(false));
+
         // время записи задаёт сервер, а не клиент
         mockMvc.perform(post("/api/observation-records").contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -109,8 +115,61 @@ class ObservationApiTests {
                 {"sessionId": %d, "description": "Слишком хорошо", "quality": 6}""".formatted(sessionId),
                 status().isBadRequest());
 
-        send(patch("/api/observation-sessions/" + sessionId), """
-                {"status": "COMPLETED"}""", status().isOk());
+        mockMvc.perform(post("/api/observation-sessions/{id}/complete", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+        mockMvc.perform(get("/api/telescopes/{id}", telescope))
+                .andExpect(jsonPath("$.available").value(true));
+    }
+
+    @Test
+    void businessOperationsKeepRelatedEntitiesConsistent() throws Exception {
+        long user = createUser();
+        long object = create("/api/celestial-objects", """
+                {"name": "Марс", "type": "PLANET", "minAperture": 50}""");
+        long firstTelescope = create("/api/telescopes", """
+                {"name": "Рефрактор 90", "aperture": 90}""");
+        long secondTelescope = create("/api/telescopes", """
+                {"name": "Рефлектор 130", "aperture": 130}""");
+        long sessionId = create("/api/observation-sessions",
+                session(object, firstTelescope, user, "20:00", "21:00"));
+
+        send(post("/api/observation-sessions/" + sessionId + "/reschedule"), """
+                {"startTime": "2026-10-01T21:00:00Z", "endTime": "2026-10-01T22:00:00Z"}""",
+                status().isOk());
+        send(post("/api/observation-sessions/" + sessionId + "/change-telescope"), """
+                {"telescopeId": %d}""".formatted(secondTelescope), status().isOk());
+
+        mockMvc.perform(post("/api/observation-sessions/{id}/start", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+        mockMvc.perform(get("/api/telescopes/{id}", secondTelescope))
+                .andExpect(jsonPath("$.available").value(false));
+
+        mockMvc.perform(post("/api/observation-sessions/{id}/complete", sessionId))
+                .andExpect(status().isConflict());
+        long recordId = create("/api/observation-records", """
+                {"sessionId": %d, "description": "Видна полярная шапка", "quality": 4}"""
+                .formatted(sessionId));
+        mockMvc.perform(post("/api/observation-sessions/{id}/complete", sessionId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+        mockMvc.perform(get("/api/telescopes/{id}", secondTelescope))
+                .andExpect(jsonPath("$.available").value(true));
+        mockMvc.perform(delete("/api/observation-records/{id}", recordId))
+                .andExpect(status().isConflict());
+
+        long cancelledSession = create("/api/observation-sessions",
+                session(object, firstTelescope, user, "22:00", "23:00"));
+        mockMvc.perform(post("/api/observation-sessions/{id}/start", cancelledSession))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/observation-sessions/{id}/cancel", cancelledSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        mockMvc.perform(get("/api/telescopes/{id}", firstTelescope))
+                .andExpect(jsonPath("$.available").value(true));
+        mockMvc.perform(post("/api/observation-sessions/{id}/cancel", sessionId))
+                .andExpect(status().isConflict());
     }
 
     @Test

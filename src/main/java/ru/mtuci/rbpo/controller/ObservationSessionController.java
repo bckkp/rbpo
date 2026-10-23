@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import ru.mtuci.rbpo.dto.ObservationSessionRequest;
 import ru.mtuci.rbpo.dto.ObservationSessionResponse;
+import ru.mtuci.rbpo.dto.ChangeTelescopeRequest;
+import ru.mtuci.rbpo.dto.RescheduleSessionRequest;
 import ru.mtuci.rbpo.model.ObservationSession;
 import ru.mtuci.rbpo.service.ObservationSessionService;
 
@@ -53,6 +55,33 @@ public class ObservationSessionController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id) {
         service.delete(id);
+    }
+
+    @PostMapping("/{id}/start")
+    public ObservationSessionResponse start(@PathVariable Long id) {
+        return toResponse(service.start(id));
+    }
+
+    @PostMapping("/{id}/complete")
+    public ObservationSessionResponse complete(@PathVariable Long id) {
+        return toResponse(service.complete(id));
+    }
+
+    @PostMapping("/{id}/cancel")
+    public ObservationSessionResponse cancel(@PathVariable Long id) {
+        return toResponse(service.cancel(id));
+    }
+
+    @PostMapping("/{id}/reschedule")
+    public ObservationSessionResponse reschedule(@PathVariable Long id,
+                                                 @RequestBody RescheduleSessionRequest request) {
+        return toResponse(service.reschedule(id, request.startTime(), request.endTime()));
+    }
+
+    @PostMapping("/{id}/change-telescope")
+    public ObservationSessionResponse changeTelescope(@PathVariable Long id,
+                                                      @RequestBody ChangeTelescopeRequest request) {
+        return toResponse(service.changeTelescope(id, request.telescopeId()));
     }
 
     private ObservationSession toEntity(ObservationSessionRequest request) {

@@ -1,9 +1,12 @@
 package ru.mtuci.rbpo.repository;
 
-import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 import ru.mtuci.rbpo.model.CelestialObject;
 
-@Repository
-public class CelestialObjectRepository extends InMemoryRepository<CelestialObject> {
+public interface CelestialObjectRepository extends JpaRepository<CelestialObject, Long> {
+
+    boolean existsByNameIgnoreCase(String name);
+
+    boolean existsByNameIgnoreCaseAndIdNot(String name, Long id);
 }

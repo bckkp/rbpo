@@ -1,9 +1,16 @@
 package ru.mtuci.rbpo.repository;
 
-import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 import ru.mtuci.rbpo.model.User;
 
-@Repository
-public class UserRepository extends InMemoryRepository<User> {
+public interface UserRepository extends JpaRepository<User, Long> {
+
+    boolean existsByUsernameIgnoreCase(String username);
+
+    boolean existsByUsernameIgnoreCaseAndIdNot(String username, Long id);
+
+    boolean existsByEmailIgnoreCase(String email);
+
+    boolean existsByEmailIgnoreCaseAndIdNot(String email, Long id);
 }

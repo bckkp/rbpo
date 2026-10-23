@@ -1,3 +1,13 @@
 spring:
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: "1BAS24014"
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/rbpo}
+    username: ${DB_USERNAME:rbpo_app}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false

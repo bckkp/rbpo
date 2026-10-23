@@ -2,16 +2,37 @@ package ru.mtuci.rbpo.model;
 
 import java.time.Instant;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.Table;
+
 /** Сеанс наблюдения: какой объект, на каком телескопе, кто наблюдает и когда. */
+@Entity
+@Table(name = "observation_sessions")
 public class ObservationSession extends BaseEntity {
 
+    @Column(name = "celestial_object_id", nullable = false)
     private Long celestialObjectId;
+
+    @Column(name = "telescope_id", nullable = false)
     private Long telescopeId;
+
+    @Column(name = "observer_id", nullable = false)
     private Long observerId;
+
+    @Column(name = "start_time", nullable = false)
     private Instant startTime;
+
+    @Column(name = "end_time", nullable = false)
     private Instant endTime;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
     private SessionStatus status;
     /** Время создания сеанса, задаётся сервером. */
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     public Long getCelestialObjectId() {

@@ -4,9 +4,9 @@ import static ru.mtuci.rbpo.service.Checks.required;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Objects;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import ru.mtuci.rbpo.exception.BadRequestException;
 import ru.mtuci.rbpo.exception.ConflictException;
@@ -22,6 +22,7 @@ import ru.mtuci.rbpo.repository.TelescopeRepository;
 import ru.mtuci.rbpo.repository.UserRepository;
 
 @Service
+@Transactional
 public class ObservationSessionService {
 
     private final ObservationSessionRepository sessionRepository;
@@ -55,6 +56,8 @@ public class ObservationSessionService {
         session.setCreatedAt(Instant.now());
         if (session.getStatus() == null) {
             session.setStatus(SessionStatus.PLANNED);
+        } else if (session.getStatus() != SessionStatus.PLANNED) {
+            throw new BadRequestException("Новый сеанс может иметь только статус PLANNED");
         }
         validate(session, true);
         return sessionRepository.save(session);
@@ -62,8 +65,9 @@ public class ObservationSessionService {
 
     public ObservationSession update(Long id, ObservationSession patch) {
         ObservationSession session = findById(id);
-        boolean telescopeChanged = patch.getTelescopeId() != null
-                && !patch.getTelescopeId().equals(session.getTelescopeId());
+        if (patch.getStatus() != null && patch.getStatus() != session.getStatus()) {
+            throw new BadRequestException("Статус сеанса изменяется бизнес-операциями start, complete и cancel");
+        }
         if (patch.getCelestialObjectId() != null) {
             session.setCelestialObjectId(patch.getCelestialObjectId());
         }
@@ -79,10 +83,78 @@ public class ObservationSessionService {
         if (patch.getEndTime() != null) {
             session.setEndTime(patch.getEndTime());
         }
-        if (patch.getStatus() != null) {
-            session.setStatus(patch.getStatus());
+        validate(session, true);
+        return sessionRepository.save(session);
+    }
+
+    /** Начинает запланированный сеанс и занимает телескоп. */
+    public ObservationSession start(Long id) {
+        ObservationSession session = findByIdForUpdate(id);
+        requireStatus(session, SessionStatus.PLANNED, "начать");
+        Telescope telescope = findTelescopeForUpdate(session.getTelescopeId());
+        if (!telescope.getAvailable()) {
+            throw new ConflictException("Телескоп '" + telescope.getName() + "' недоступен");
         }
-        validate(session, telescopeChanged);
+        telescope.setAvailable(false);
+        session.setStatus(SessionStatus.IN_PROGRESS);
+        telescopeRepository.save(telescope);
+        return sessionRepository.save(session);
+    }
+
+    /** Завершает текущий сеанс и освобождает телескоп. */
+    public ObservationSession complete(Long id) {
+        ObservationSession session = findByIdForUpdate(id);
+        requireStatus(session, SessionStatus.IN_PROGRESS, "завершить");
+        if (!recordRepository.existsBySessionId(id)) {
+            throw new ConflictException("Нельзя завершить сеанс без наблюдательных записей");
+        }
+        Telescope telescope = findTelescopeForUpdate(session.getTelescopeId());
+        telescope.setAvailable(true);
+        session.setStatus(SessionStatus.COMPLETED);
+        telescopeRepository.save(telescope);
+        return sessionRepository.save(session);
+    }
+
+    /** Отменяет запланированный или текущий сеанс; занятый телескоп освобождается. */
+    public ObservationSession cancel(Long id) {
+        ObservationSession session = findByIdForUpdate(id);
+        if (session.getStatus() == SessionStatus.COMPLETED || session.getStatus() == SessionStatus.CANCELLED) {
+            throw new ConflictException("Нельзя отменить сеанс в статусе " + session.getStatus());
+        }
+        if (session.getStatus() == SessionStatus.IN_PROGRESS) {
+            Telescope telescope = findTelescopeForUpdate(session.getTelescopeId());
+            telescope.setAvailable(true);
+            telescopeRepository.save(telescope);
+        }
+        session.setStatus(SessionStatus.CANCELLED);
+        return sessionRepository.save(session);
+    }
+
+    /** Переносит запланированный сеанс на другой интервал с проверкой расписания. */
+    public ObservationSession reschedule(Long id, Instant startTime, Instant endTime) {
+        ObservationSession session = findByIdForUpdate(id);
+        requireStatus(session, SessionStatus.PLANNED, "перенести");
+        Instant newStart = required(startTime, "startTime");
+        Instant newEnd = required(endTime, "endTime");
+        if (newStart.equals(session.getStartTime()) && newEnd.equals(session.getEndTime())) {
+            throw new BadRequestException("Новый интервал совпадает с текущим");
+        }
+        session.setStartTime(newStart);
+        session.setEndTime(newEnd);
+        validate(session, true);
+        return sessionRepository.save(session);
+    }
+
+    /** Назначает запланированному сеансу другой подходящий свободный телескоп. */
+    public ObservationSession changeTelescope(Long id, Long telescopeId) {
+        ObservationSession session = findByIdForUpdate(id);
+        requireStatus(session, SessionStatus.PLANNED, "сменить телескоп для");
+        Long newTelescopeId = required(telescopeId, "telescopeId");
+        if (newTelescopeId.equals(session.getTelescopeId())) {
+            throw new BadRequestException("Этот телескоп уже назначен сеансу");
+        }
+        session.setTelescopeId(newTelescopeId);
+        validate(session, true);
         return sessionRepository.save(session);
     }
 
@@ -105,6 +177,12 @@ public class ObservationSessionService {
     }
 
     private void deleteWithRecords(Long sessionId) {
+        ObservationSession session = findByIdForUpdate(sessionId);
+        if (session.getStatus() == SessionStatus.IN_PROGRESS) {
+            Telescope telescope = findTelescopeForUpdate(session.getTelescopeId());
+            telescope.setAvailable(true);
+            telescopeRepository.save(telescope);
+        }
         recordRepository.findBySessionId(sessionId).forEach(r -> recordRepository.deleteById(r.getId()));
         sessionRepository.deleteById(sessionId);
     }
@@ -118,7 +196,7 @@ public class ObservationSessionService {
 
         CelestialObject object = celestialObjectRepository.findById(objectId)
                 .orElseThrow(() -> new BadRequestException("Небесный объект с id=" + objectId + " не существует"));
-        Telescope telescope = telescopeRepository.findById(telescopeId)
+        Telescope telescope = telescopeRepository.findByIdForUpdate(telescopeId)
                 .orElseThrow(() -> new BadRequestException("Телескоп с id=" + telescopeId + " не существует"));
         if (!userRepository.existsById(observerId)) {
             throw new BadRequestException("Пользователь с id=" + observerId + " не существует");
@@ -137,12 +215,25 @@ public class ObservationSessionService {
         if (checkTelescopeAvailability && !telescope.getAvailable()) {
             throw new ConflictException("Телескоп '" + telescope.getName() + "' сейчас недоступен");
         }
-        boolean overlaps = sessionRepository.findByTelescopeId(telescopeId).stream()
-                .filter(other -> !Objects.equals(other.getId(), session.getId()))
-                .filter(other -> other.getStatus() != SessionStatus.CANCELLED)
-                .anyMatch(other -> other.getStartTime().isBefore(end) && start.isBefore(other.getEndTime()));
-        if (overlaps) {
+        Long excludedId = session.getId() == null ? -1L : session.getId();
+        if (sessionRepository.hasOverlap(telescopeId, start, end, excludedId, SessionStatus.CANCELLED)) {
             throw new ConflictException("Телескоп '" + telescope.getName() + "' уже занят в этом интервале");
+        }
+    }
+
+    private ObservationSession findByIdForUpdate(Long id) {
+        return sessionRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NotFoundException("Сеанс наблюдения", id));
+    }
+
+    private Telescope findTelescopeForUpdate(Long id) {
+        return telescopeRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new NotFoundException("Телескоп", id));
+    }
+
+    private void requireStatus(ObservationSession session, SessionStatus expected, String operation) {
+        if (session.getStatus() != expected) {
+            throw new ConflictException("Нельзя " + operation + " сеанс в статусе " + session.getStatus());
         }
     }
 }
