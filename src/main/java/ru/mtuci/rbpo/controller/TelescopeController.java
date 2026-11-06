@@ -3,6 +3,7 @@ package ru.mtuci.rbpo.controller;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -29,28 +30,33 @@ public class TelescopeController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'OBSERVER')")
     public List<TelescopeResponse> getAll() {
         return service.findAll().stream().map(this::toResponse).toList();
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OBSERVER')")
     public TelescopeResponse getById(@PathVariable Long id) {
         return toResponse(service.findById(id));
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('ADMIN')")
     public TelescopeResponse create(@RequestBody TelescopeRequest request) {
         return toResponse(service.create(toEntity(request)));
     }
 
     @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public TelescopeResponse update(@PathVariable Long id, @RequestBody TelescopeRequest request) {
         return toResponse(service.update(id, toEntity(request)));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('ADMIN')")
     public void delete(@PathVariable Long id) {
         service.delete(id);
     }

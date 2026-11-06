@@ -3,6 +3,7 @@ package ru.mtuci.rbpo.controller;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -29,28 +30,33 @@ public class UserController {
     }
 
     @GetMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public List<UserResponse> getAll() {
         return service.findAll().stream().map(this::toResponse).toList();
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or @authorizationService.isCurrentUser(#id, authentication)")
     public UserResponse getById(@PathVariable Long id) {
         return toResponse(service.findById(id));
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('ADMIN')")
     public UserResponse create(@RequestBody UserRequest request) {
-        return toResponse(service.create(toEntity(request)));
+        return toResponse(service.create(toEntity(request), request.password(), request.role(), request.status()));
     }
 
     @PatchMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public UserResponse update(@PathVariable Long id, @RequestBody UserRequest request) {
-        return toResponse(service.update(id, toEntity(request)));
+        return toResponse(service.update(id, toEntity(request), request.password(), request.role(), request.status()));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('ADMIN')")
     public void delete(@PathVariable Long id) {
         service.delete(id);
     }
@@ -64,6 +70,7 @@ public class UserController {
     }
 
     private UserResponse toResponse(User entity) {
-        return new UserResponse(entity.getId(), entity.getUsername(), entity.getFullName(), entity.getEmail());
+        return new UserResponse(entity.getId(), entity.getUsername(), entity.getFullName(), entity.getEmail(),
+                entity.getRole(), entity.getStatus());
     }
 }

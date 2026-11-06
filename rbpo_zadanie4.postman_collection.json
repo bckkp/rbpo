@@ -1,0 +1,336 @@
+{
+  "info": {
+    "_postman_id": "a947db5e-6294-4d86-a9a4-1f57d68853a4",
+    "name": "РБПО — Задание 4 — Безопасность",
+    "description": "HTTP Basic, CSRF, регистрация, роли и бизнес-операции. Запускайте запросы по порядку после database/setup.sql.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:8080"},
+    {"key": "csrfToken", "value": ""},
+    {"key": "adminUsername", "value": "galileo"},
+    {"key": "adminPassword", "value": "Admin123!"},
+    {"key": "observerUsername", "value": "newton"},
+    {"key": "observerPassword", "value": "Newton123!"},
+    {"key": "otherObserverUsername", "value": "kepler"},
+    {"key": "otherObserverPassword", "value": "Observer123!"},
+    {"key": "observerId", "value": ""},
+    {"key": "objectId", "value": ""},
+    {"key": "telescopeId", "value": ""},
+    {"key": "sessionId", "value": ""},
+    {"key": "recordId", "value": ""}
+  ],
+  "item": [
+    {
+      "name": "1. Аутентификация и CSRF",
+      "item": [
+        {
+          "name": "Получить CSRF-токен",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": [
+              "pm.test('Статус 200', () => pm.response.to.have.status(200));",
+              "pm.collectionVariables.set('csrfToken', pm.response.json().token);"
+            ]}
+          }],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "GET",
+            "url": {"raw": "{{baseUrl}}/api/auth/csrf", "host": ["{{baseUrl}}"], "path": ["api", "auth", "csrf"]}
+          }
+        },
+        {
+          "name": "Регистрация наблюдателя — успех",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": [
+              "pm.test('Статус 201', () => pm.response.to.have.status(201));",
+              "pm.test('Роль OBSERVER', () => pm.expect(pm.response.json().role).to.eql('OBSERVER'));",
+              "pm.collectionVariables.set('observerId', pm.response.json().id);"
+            ]}
+          }],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"username\": \"{{observerUsername}}\",\n  \"fullName\": \"Исаак Ньютон\",\n  \"email\": \"newton@example.com\",\n  \"password\": \"{{observerPassword}}\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"]}
+          }
+        },
+        {
+          "name": "Регистрация со слабым паролем — 400",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": ["pm.test('Статус 400', () => pm.response.to.have.status(400));"]}
+          }],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"username\": \"weak-user\",\n  \"fullName\": \"Слабый пароль\",\n  \"email\": \"weak@example.com\",\n  \"password\": \"123\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"]}
+          }
+        },
+        {
+          "name": "Повторная регистрация — 409",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": ["pm.test('Статус 409', () => pm.response.to.have.status(409));"]}
+          }],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"username\": \"{{observerUsername}}\",\n  \"fullName\": \"Исаак Ньютон\",\n  \"email\": \"newton@example.com\",\n  \"password\": \"{{observerPassword}}\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "auth", "register"]}
+          }
+        },
+        {
+          "name": "Защищённый запрос без Basic Auth — 401",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": ["pm.test('Статус 401', () => pm.response.to.have.status(401));"]}
+          }],
+          "request": {
+            "auth": {"type": "noauth"},
+            "method": "GET",
+            "url": {"raw": "{{baseUrl}}/api/telescopes", "host": ["{{baseUrl}}"], "path": ["api", "telescopes"]}
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Роли",
+      "item": [
+        {
+          "name": "Наблюдатель читает телескопы — 200",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": ["pm.test('Статус 200', () => pm.response.to.have.status(200));"]}
+          }],
+          "request": {
+            "auth": {"type": "basic", "basic": [
+              {"key": "username", "value": "{{observerUsername}}", "type": "string"},
+              {"key": "password", "value": "{{observerPassword}}", "type": "string"}
+            ]},
+            "method": "GET",
+            "url": {"raw": "{{baseUrl}}/api/telescopes", "host": ["{{baseUrl}}"], "path": ["api", "telescopes"]}
+          }
+        },
+        {
+          "name": "Наблюдатель создаёт объект — 403",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": ["pm.test('Статус 403', () => pm.response.to.have.status(403));"]}
+          }],
+          "request": {
+            "auth": {"type": "basic", "basic": [
+              {"key": "username", "value": "{{observerUsername}}", "type": "string"},
+              {"key": "password", "value": "{{observerPassword}}", "type": "string"}
+            ]},
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Марс\",\n  \"type\": \"PLANET\",\n  \"minAperture\": 50\n}"},
+            "url": {"raw": "{{baseUrl}}/api/celestial-objects", "host": ["{{baseUrl}}"], "path": ["api", "celestial-objects"]}
+          }
+        },
+        {
+          "name": "Администратор без CSRF создаёт объект — 403",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": ["pm.test('Статус 403', () => pm.response.to.have.status(403));"]}
+          }],
+          "request": {
+            "auth": {"type": "basic", "basic": [
+              {"key": "username", "value": "{{adminUsername}}", "type": "string"},
+              {"key": "password", "value": "{{adminPassword}}", "type": "string"}
+            ]},
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Марс\",\n  \"type\": \"PLANET\",\n  \"minAperture\": 50\n}"},
+            "url": {"raw": "{{baseUrl}}/api/celestial-objects", "host": ["{{baseUrl}}"], "path": ["api", "celestial-objects"]}
+          }
+        },
+        {
+          "name": "Администратор создаёт объект — 201",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": [
+              "pm.test('Статус 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('objectId', pm.response.json().id);"
+            ]}
+          }],
+          "request": {
+            "auth": {"type": "basic", "basic": [
+              {"key": "username", "value": "{{adminUsername}}", "type": "string"},
+              {"key": "password", "value": "{{adminPassword}}", "type": "string"}
+            ]},
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Марс\",\n  \"type\": \"PLANET\",\n  \"minAperture\": 50\n}"},
+            "url": {"raw": "{{baseUrl}}/api/celestial-objects", "host": ["{{baseUrl}}"], "path": ["api", "celestial-objects"]}
+          }
+        },
+        {
+          "name": "Администратор создаёт телескоп — 201",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": [
+              "pm.test('Статус 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('telescopeId', pm.response.json().id);"
+            ]}
+          }],
+          "request": {
+            "auth": {"type": "basic", "basic": [
+              {"key": "username", "value": "{{adminUsername}}", "type": "string"},
+              {"key": "password", "value": "{{adminPassword}}", "type": "string"}
+            ]},
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"name\": \"Учебный рефрактор 90\",\n  \"aperture\": 90\n}"},
+            "url": {"raw": "{{baseUrl}}/api/telescopes", "host": ["{{baseUrl}}"], "path": ["api", "telescopes"]}
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Сеанс наблюдения",
+      "item": [
+        {
+          "name": "Наблюдатель создаёт свой сеанс — 201",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": [
+              "pm.test('Статус 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('sessionId', pm.response.json().id);"
+            ]}
+          }],
+          "request": {
+            "auth": {"type": "basic", "basic": [
+              {"key": "username", "value": "{{observerUsername}}", "type": "string"},
+              {"key": "password", "value": "{{observerPassword}}", "type": "string"}
+            ]},
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"celestialObjectId\": {{objectId}},\n  \"telescopeId\": {{telescopeId}},\n  \"observerId\": {{observerId}},\n  \"startTime\": \"2026-12-10T20:00:00Z\",\n  \"endTime\": \"2026-12-10T21:00:00Z\"\n}"},
+            "url": {"raw": "{{baseUrl}}/api/observation-sessions", "host": ["{{baseUrl}}"], "path": ["api", "observation-sessions"]}
+          }
+        },
+        {
+          "name": "Другой наблюдатель запускает чужой сеанс — 403",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": ["pm.test('Статус 403', () => pm.response.to.have.status(403));"]}
+          }],
+          "request": {
+            "auth": {"type": "basic", "basic": [
+              {"key": "username", "value": "{{otherObserverUsername}}", "type": "string"},
+              {"key": "password", "value": "{{otherObserverPassword}}", "type": "string"}
+            ]},
+            "method": "POST",
+            "header": [{"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}],
+            "url": {"raw": "{{baseUrl}}/api/observation-sessions/{{sessionId}}/start", "host": ["{{baseUrl}}"], "path": ["api", "observation-sessions", "{{sessionId}}", "start"]}
+          }
+        },
+        {
+          "name": "Владелец запускает сеанс — 200",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": [
+              "pm.test('Статус 200', () => pm.response.to.have.status(200));",
+              "pm.test('Статус сеанса IN_PROGRESS', () => pm.expect(pm.response.json().status).to.eql('IN_PROGRESS'));"
+            ]}
+          }],
+          "request": {
+            "auth": {"type": "basic", "basic": [
+              {"key": "username", "value": "{{observerUsername}}", "type": "string"},
+              {"key": "password", "value": "{{observerPassword}}", "type": "string"}
+            ]},
+            "method": "POST",
+            "header": [{"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}],
+            "url": {"raw": "{{baseUrl}}/api/observation-sessions/{{sessionId}}/start", "host": ["{{baseUrl}}"], "path": ["api", "observation-sessions", "{{sessionId}}", "start"]}
+          }
+        },
+        {
+          "name": "Владелец добавляет запись — 201",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": [
+              "pm.test('Статус 201', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('recordId', pm.response.json().id);"
+            ]}
+          }],
+          "request": {
+            "auth": {"type": "basic", "basic": [
+              {"key": "username", "value": "{{observerUsername}}", "type": "string"},
+              {"key": "password", "value": "{{observerPassword}}", "type": "string"}
+            ]},
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\n  \"sessionId\": {{sessionId}},\n  \"description\": \"Видна полярная шапка\",\n  \"quality\": 4\n}"},
+            "url": {"raw": "{{baseUrl}}/api/observation-records", "host": ["{{baseUrl}}"], "path": ["api", "observation-records"]}
+          }
+        },
+        {
+          "name": "Владелец завершает сеанс — 200",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": [
+              "pm.test('Статус 200', () => pm.response.to.have.status(200));",
+              "pm.test('Статус сеанса COMPLETED', () => pm.expect(pm.response.json().status).to.eql('COMPLETED'));"
+            ]}
+          }],
+          "request": {
+            "auth": {"type": "basic", "basic": [
+              {"key": "username", "value": "{{observerUsername}}", "type": "string"},
+              {"key": "password", "value": "{{observerPassword}}", "type": "string"}
+            ]},
+            "method": "POST",
+            "header": [{"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}],
+            "url": {"raw": "{{baseUrl}}/api/observation-sessions/{{sessionId}}/complete", "host": ["{{baseUrl}}"], "path": ["api", "observation-sessions", "{{sessionId}}", "complete"]}
+          }
+        },
+        {
+          "name": "Повторное завершение — 409",
+          "event": [{
+            "listen": "test",
+            "script": {"exec": ["pm.test('Статус 409', () => pm.response.to.have.status(409));"]}
+          }],
+          "request": {
+            "auth": {"type": "basic", "basic": [
+              {"key": "username", "value": "{{observerUsername}}", "type": "string"},
+              {"key": "password", "value": "{{observerPassword}}", "type": "string"}
+            ]},
+            "method": "POST",
+            "header": [{"key": "X-XSRF-TOKEN", "value": "{{csrfToken}}"}],
+            "url": {"raw": "{{baseUrl}}/api/observation-sessions/{{sessionId}}/complete", "host": ["{{baseUrl}}"], "path": ["api", "observation-sessions", "{{sessionId}}", "complete"]}
+          }
+        }
+      ]
+    }
+  ]
+}

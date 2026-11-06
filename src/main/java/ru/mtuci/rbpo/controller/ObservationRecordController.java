@@ -3,6 +3,7 @@ package ru.mtuci.rbpo.controller;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -29,28 +30,33 @@ public class ObservationRecordController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'OBSERVER')")
     public List<ObservationRecordResponse> getAll() {
         return service.findAll().stream().map(this::toResponse).toList();
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OBSERVER')")
     public ObservationRecordResponse getById(@PathVariable Long id) {
         return toResponse(service.findById(id));
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("@authorizationService.canCreateRecord(#request, authentication)")
     public ObservationRecordResponse create(@RequestBody ObservationRecordRequest request) {
         return toResponse(service.create(toEntity(request)));
     }
 
     @PatchMapping("/{id}")
+    @PreAuthorize("@authorizationService.canUpdateRecord(#id, #request, authentication)")
     public ObservationRecordResponse update(@PathVariable Long id, @RequestBody ObservationRecordRequest request) {
         return toResponse(service.update(id, toEntity(request)));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("@authorizationService.canModifyRecord(#id, authentication)")
     public void delete(@PathVariable Long id) {
         service.delete(id);
     }
